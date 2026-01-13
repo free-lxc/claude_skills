@@ -2,6 +2,23 @@
 
 Detailed configuration for deploying specific frameworks to GitHub Pages.
 
+## Package Manager Compatibility
+
+All frameworks support multiple package managers. Use the table below to translate commands:
+
+| Command | npm | yarn | pnpm | bun |
+|---------|-----|------|------|-----|
+| Install deps | `npm install` | `yarn install` | `pnpm install` | `bun install` |
+| Install (CI) | `npm ci` | `yarn install --frozen-lockfile` | `pnpm install --frozen-lockfile` | `bun install --frozen-lockfile` |
+| Add package | `npm add <pkg>` | `yarn add <pkg>` | `pnpm add <pkg>` | `bun add <pkg>` |
+| Dev server | `npm run dev` | `yarn dev` | `pnpm dev` | `bun run dev` |
+| Build | `npm run build` | `yarn build` | `pnpm build` | `bun run build` |
+| Test | `npm test` | `yarn test` | `pnpm test` | `bun test` |
+
+For detailed package manager setup, see [PACKAGE_MANAGER_CONFIG.md](PACKAGE_MANAGER_CONFIG.md).
+
+---
+
 ## Vite (React, Vue, Vanilla)
 
 ### Basic Config
@@ -45,6 +62,26 @@ export default {
     "preview": "vite preview"
   }
 }
+```
+
+### CI/CD Command Examples
+
+```yaml
+# npm
+- run: npm ci
+- run: npm run build
+
+# yarn
+- run: yarn install --frozen-lockfile
+- run: yarn build
+
+# pnpm
+- run: pnpm install --frozen-lockfile
+- run: pnpm run build
+
+# bun
+- run: bun install --frozen-lockfile
+- run: bun run build
 ```
 
 ---

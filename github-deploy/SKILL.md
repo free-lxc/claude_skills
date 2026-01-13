@@ -1,6 +1,6 @@
 ---
 name: github-deploy
-description: Complete GitHub deployment solution for static sites, frontend applications, and Node scripts. Use when deploying to GitHub Pages, setting up CI/CD workflows, configuring custom domains, or deploying serverless Node applications. Supports static site deployment (HTML/CSS/JS), framework builds (React/Vue/Next.js/Nuxt), Node script deployment, GitHub Actions workflow setup, and custom domain with HTTPS configuration.
+description: Complete GitHub deployment solution with automatic package manager detection. Automatically detects npm/yarn/pnpm/bun and generates matching CI/CD workflows. Use when deploying to GitHub Pages, setting up CI/CD workflows, configuring custom domains, or deploying serverless Node applications. Supports static sites (HTML/CSS/JS), framework builds (React/Vue/Next.js/Nuxt/Angular), Node script deployment, multi-environment deployments, and custom domain with HTTPS configuration.
 ---
 
 # GitHub Deploy
@@ -31,8 +31,211 @@ For any deployment:
 
 1. **Check GitHub repository exists** - Initialize if needed
 2. **Identify project type** - Use decision tree above
-3. **Create GitHub Actions workflow** - See workflows below
-4. **Push to trigger deployment** - CI/CD handles the rest
+3. **Detect package manager** - See section below
+4. **Create GitHub Actions workflow** - See workflows below
+5. **Push to trigger deployment** - CI/CD handles the rest
+
+---
+
+## Package Manager Detection
+
+GitHub Actions workflows need to use the correct package manager and cache configuration.
+
+### Detection Methods
+
+**Method 1: Check lock file**
+```bash
+# In your project directory
+ls -la | grep -E "(package-lock|yarn.lock|pnpm-lock|bun.lock)"
+```
+
+| Lock File | Package Manager |
+|-----------|-----------------|
+| `package-lock.json` | npm |
+| `yarn.lock` | yarn (classic) |
+| `yarn.lock` + `.yarn/cache` | yarn (berry/v3+) |
+| `pnpm-lock.yaml` | pnpm |
+| `bun.lockb` | bun |
+| `node_modules` only | Check package.json `packageManager` field |
+
+**Method 2: Check package.json**
+```bash
+# Look for packageManager field
+cat package.json | grep "packageManager"
+```
+
+Examples:
+```json
+{
+  "packageManager": "npm@10.2.4"
+  "packageManager": "yarn@1.22.19"
+  "packageManager": "yarn@4.0.2"
+  "packageManager": "pnpm@9.0.0"
+  "packageManager": "bun@1.0.0"
+}
+```
+
+**Method 3: Check CLI availability**
+```bash
+which npm && echo "npm available"
+which yarn && echo "yarn available"
+which pnpm && echo "pnpm available"
+which bun && echo "bun available"
+```
+
+### Quick Reference Matrix
+
+| Package Manager | Install Command | Cache Key | Cache Path |
+|----------------|-----------------|-----------|------------|
+| npm | `npm ci` | `npm` | `node_modules` |
+| yarn v1 | `yarn install --frozen-lockfile` | `yarn` | `node_modules/.cache/yarn` |
+| yarn v3+ | `yarn install --immutable` | `yarn` | `.yarn/cache` |
+| pnpm | `pnpm install --frozen-lockfile` | `pnpm` | `node_modules/.cache/pnpm` |
+| bun | `bun install --frozen-lockfile` | `bun` | `node_modules/.cache/bun` |
+
+### Package Manager Actions Setup
+
+```yaml
+# npm
+- uses: actions/setup-node@v4
+  with:
+    node-version: '20'
+    cache: 'npm'
+
+# yarn (v1)
+- uses: actions/setup-node@v4
+  with:
+    node-version: '20'
+    cache: 'yarn'
+
+# yarn (berry/v3+)
+- uses: actions/setup-node@v4
+  with:
+    node-version: '20'
+    cache: 'yarn'
+- run: corepack enable
+- run: yarn set version stable
+- run: yarn install --immutable
+
+# pnpm
+- uses: pnpm/action-setup@v4
+  with:
+    version: 9
+- uses: actions/setup-node@v4
+  with:
+    node-version: '20'
+    cache: 'pnpm'
+- run: pnpm install --frozen-lockfile
+
+# bun
+- uses: oven-sh/setup-bun@v2
+  with:
+    bun-version: latest
+- run: bun install --frozen-lockfile
+```
+
+### Unified Workflow Template (All Package Managers)
+
+```yaml
+name: Deploy with Package Manager Detection
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Detect and setup package manager
+      - name: Detect package manager
+        id: detect-pm
+        run: |
+          if [ -f "package-lock.json" ]; then
+            echo "manager=npm" >> $GITHUB_OUTPUT
+            echo "cache=npm" >> $GITHUB_OUTPUT
+            echo "command=npm ci" >> $GITHUB_OUTPUT
+            echo "build=npm run build" >> $GITHUB_OUTPUT
+          elif [ -f "pnpm-lock.yaml" ]; then
+            echo "manager=pnpm" >> $GITHUB_OUTPUT
+            echo "cache=pnpm" >> $GITHUB_OUTPUT
+            echo "command=pnpm install --frozen-lockfile" >> $GITHUB_OUTPUT
+            echo "build=pnpm run build" >> $GITHUB_OUTPUT
+          elif [ -f "bun.lockb" ]; then
+            echo "manager=bun" >> $GITHUB_OUTPUT
+            echo "cache=bun" >> $GITHUB_OUTPUT
+            echo "command=bun install --frozen-lockfile" >> $GITHUB_OUTPUT
+            echo "build=bun run build" >> $GITHUB_OUTPUT
+          else
+            echo "manager=yarn" >> $GITHUB_OUTPUT
+            echo "cache=yarn" >> $GITHUB_OUTPUT
+            echo "command=yarn install --frozen-lockfile" >> $GITHUB_OUTPUT
+            echo "build=yarn build" >> $GITHUB_OUTPUT
+          fi
+
+      # Setup Node.js with detected cache
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: ${{ steps.detect-pm.outputs.cache }}
+
+      # Special setup for pnpm
+      - name: Setup pnpm
+        if: steps.detect-pm.outputs.manager == 'pnpm'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      # Special setup for bun
+      - name: Setup bun
+        if: steps.detect-pm.outputs.manager == 'bun'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Special setup for yarn berry
+      - name: Enable Corepack (yarn berry)
+        if: steps.detect-pm.outputs.manager == 'yarn'
+        run: |
+          corepack enable
+          if grep -q '"yarn"' .yarnrc.yml 2>/dev/null || [ -d ".yarn/cache" ]; then
+            yarn set version stable
+          fi
+
+      # Install dependencies
+      - name: Install dependencies
+        run: ${{ steps.detect-pm.outputs.command }}
+
+      # Build project
+      - name: Build
+        run: ${{ steps.detect-pm.outputs.build }}
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+      - name: Deploy to Pages
+        uses: actions/deploy-pages@v4
+```
+
+---
 
 ## Workflows
 
@@ -87,8 +290,14 @@ Use for: React, Vue, Angular - any framework requiring build step.
 
 **Workflow file:** `.github/workflows/deploy.yml`
 
+#### Option A: Automatic Detection (Recommended)
+
+Use the unified workflow template from the **Package Manager Detection** section above. It automatically detects and configures npm, yarn, pnpm, or bun.
+
+#### Option B: npm
+
 ```yaml
-name: Deploy framework site
+name: Deploy framework site (npm)
 
 on:
   push:
@@ -122,7 +331,6 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # Add build-time environment variables
           VITE_API_URL: ${{ secrets.API_URL }}
 
       - name: Setup Pages
@@ -131,7 +339,171 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./dist  # Adjust: React/Vite use dist, Vue uses dist, CRA uses build
+          path: ./dist
+
+      - name: Deploy to Pages
+        uses: actions/deploy-pages@v4
+```
+
+#### Option C: yarn
+
+```yaml
+name: Deploy framework site (yarn)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Enable Corepack (yarn berry)
+        run: |
+          corepack enable
+          if [ -f ".yarnrc.yml" ]; then
+            yarn set version stable
+          fi
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build
+        run: yarn build
+        env:
+          VITE_API_URL: ${{ secrets.API_URL }}
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+      - name: Deploy to Pages
+        uses: actions/deploy-pages@v4
+```
+
+#### Option D: pnpm
+
+```yaml
+name: Deploy framework site (pnpm)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+        env:
+          VITE_API_URL: ${{ secrets.API_URL }}
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+      - name: Deploy to Pages
+        uses: actions/deploy-pages@v4
+```
+
+#### Option E: bun
+
+```yaml
+name: Deploy framework site (bun)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+        env:
+          VITE_API_URL: ${{ secrets.API_URL }}
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
 
       - name: Deploy to Pages
         uses: actions/deploy-pages@v4
@@ -249,7 +621,7 @@ Use for: Separate staging/production deployments.
 **Workflow file:** `.github/workflows/deploy.yml`
 
 ```yaml
-name: Multi-env Deploy
+name: Multi-env Deploy with Package Manager Detection
 
 on:
   push:
@@ -257,18 +629,67 @@ on:
       - develop    # Staging
       - main       # Production
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      # Detect package manager
+      - name: Detect package manager
+        id: detect-pm
+        run: |
+          if [ -f "package-lock.json" ]; then
+            echo "manager=npm" >> $GITHUB_OUTPUT
+            echo "cache=npm" >> $GITHUB_OUTPUT
+            echo "install=npm ci" >> $GITHUB_OUTPUT
+            echo "build=npm run build" >> $GITHUB_OUTPUT
+          elif [ -f "pnpm-lock.yaml" ]; then
+            echo "manager=pnpm" >> $GITHUB_OUTPUT
+            echo "cache=pnpm" >> $GITHUB_OUTPUT
+            echo "install=pnpm install --frozen-lockfile" >> $GITHUB_OUTPUT
+            echo "build=pnpm run build" >> $GITHUB_OUTPUT
+          elif [ -f "bun.lockb" ]; then
+            echo "manager=bun" >> $GITHUB_OUTPUT
+            echo "cache=bun" >> $GITHUB_OUTPUT
+            echo "install=bun install --frozen-lockfile" >> $GITHUB_OUTPUT
+            echo "build=bun run build" >> $GITHUB_OUTPUT
+          else
+            echo "manager=yarn" >> $GITHUB_OUTPUT
+            echo "cache=yarn" >> $GITHUB_OUTPUT
+            echo "install=yarn install --frozen-lockfile" >> $GITHUB_OUTPUT
+            echo "build=yarn build" >> $GITHUB_OUTPUT
+          fi
+
+      # Setup based on package manager
+      - name: Setup pnpm
+        if: steps.detect-pm.outputs.manager == 'pnpm'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup bun
+        if: steps.detect-pm.outputs.manager == 'bun'
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: ${{ steps.detect-pm.outputs.cache }}
 
-      - run: npm ci
+      - name: Enable Corepack (yarn)
+        if: steps.detect-pm.outputs.manager == 'yarn'
+        run: corepack enable
 
       # Environment-specific configs
       - name: Configure for ${{ github.ref_name }}
@@ -281,7 +702,11 @@ jobs:
             echo "VITE_API_URL=${{ secrets.STAGING_API_URL }}" >> $GITHUB_ENV
           fi
 
-      - run: npm run build
+      - name: Install dependencies
+        run: ${{ steps.detect-pm.outputs.install }}
+
+      - name: Build
+        run: ${{ steps.detect-pm.outputs.build }}
         env:
           VITE_API_URL: ${{ env.VITE_API_URL }}
 
@@ -405,6 +830,7 @@ This checks:
 
 For detailed information on specific scenarios:
 
+- **Package manager configuration:** See [PACKAGE_MANAGER_CONFIG.md](references/PACKAGE_MANAGER_CONFIG.md)
 - **Advanced Actions patterns:** See [ADVANCED_WORKFLOWS.md](references/ADVANCED_WORKFLOWS.md)
 - **Framework-specific configs:** See [FRAMEWORK_CONFIGS.md](references/FRAMEWORK_CONFIGS.md)
 - **DNS and domain setup:** See [DOMAIN_SETUP.md](references/DOMAIN_SETUP.md)

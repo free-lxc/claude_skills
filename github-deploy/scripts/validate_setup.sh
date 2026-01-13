@@ -54,6 +54,12 @@ if [ -f "package.json" ]; then
             WARNINGS=$((WARNINGS + 1))
         fi
 
+        # Check for packageManager field
+        PACKAGE_MANAGER=$(jq -r '.packageManager // empty' package.json 2>/dev/null)
+        if [ -n "$PACKAGE_MANAGER" ]; then
+            echo -e "${GREEN}✓ packageManager field: $PACKAGE_MANAGER${NC}"
+        fi
+
         # Check for required fields
         NAME=$(jq -r '.name // empty' package.json 2>/dev/null)
         VERSION=$(jq -r '.version // empty' package.json 2>/dev/null)
@@ -64,6 +70,66 @@ else
     echo -e "${YELLOW}⚠ No package.json found${NC}"
     echo "  Static sites may not need this"
     WARNINGS=$((WARNINGS + 1))
+fi
+
+# Detect package manager
+echo ""
+echo "📦 Detecting package manager..."
+PACKAGE_MANAGER=""
+LOCK_FILE=""
+
+if [ -f "package-lock.json" ]; then
+    PACKAGE_MANAGER="npm"
+    LOCK_FILE="package-lock.json"
+    echo -e "${GREEN}✓ npm detected (package-lock.json found)${NC}"
+elif [ -f "pnpm-lock.yaml" ]; then
+    PACKAGE_MANAGER="pnpm"
+    LOCK_FILE="pnpm-lock.yaml"
+    echo -e "${GREEN}✓ pnpm detected (pnpm-lock.yaml found)${NC}"
+elif [ -f "bun.lockb" ]; then
+    PACKAGE_MANAGER="bun"
+    LOCK_FILE="bun.lockb"
+    echo -e "${GREEN}✓ bun detected (bun.lockb found)${NC}"
+elif [ -f "yarn.lock" ]; then
+    PACKAGE_MANAGER="yarn"
+    LOCK_FILE="yarn.lock"
+    # Check if it's yarn berry
+    if [ -d ".yarn/cache" ] || [ -f ".yarnrc.yml" ]; then
+        echo -e "${GREEN}✓ yarn berry detected (yarn.lock + .yarn/cache)${NC}"
+        echo "  Use 'corepack enable' in CI/CD"
+    else
+        echo -e "${GREEN}✓ yarn v1 detected (yarn.lock found)${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠ No lock file found${NC}"
+    echo "  Run: npm install / yarn install / pnpm install"
+    WARNINGS=$((WARNINGS + 1))
+fi
+
+# Display package manager specific info
+if [ -n "$PACKAGE_MANAGER" ]; then
+    echo "  Package manager: $PACKAGE_MANAGER"
+    case "$PACKAGE_MANAGER" in
+        npm)
+            echo "  CI cache key: 'npm'"
+            echo "  CI install command: 'npm ci'"
+            ;;
+        yarn)
+            echo "  CI cache key: 'yarn'"
+            echo "  CI install command: 'yarn install --frozen-lockfile'"
+            echo "  Add 'corepack enable' for yarn berry"
+            ;;
+        pnpm)
+            echo "  CI cache key: 'pnpm'"
+            echo "  CI install command: 'pnpm install --frozen-lockfile'"
+            echo "  Use: pnpm/action-setup@v4"
+            ;;
+        bun)
+            echo "  CI cache key: 'bun'"
+            echo "  CI install command: 'bun install --frozen-lockfile'"
+            echo "  Use: oven-sh/setup-bun@v2"
+            ;;
+    esac
 fi
 
 # Check for common framework configs
