@@ -74,6 +74,42 @@
 
 ---
 
+### novel-fanfiction
+
+**功能说明：** 小说二次创作工具，支持基于原作小说进行续写、改写、风格转换、视角转换、情节拓展等多种二创形式。
+
+**核心功能：**
+- **剧情续写** (Continue) - 基于原作设定和情节走向，续写新的章节内容
+- **情节改写** (Rewrite) - 对指定章节或情节进行重新创作，改变叙事风格或结构
+- **风格转换** (Style) - 将原作内容转换为不同的文学风格（古龙风、金庸风、翻译腔、网络文学风等）
+- **视角转换** (POV) - 从不同角色的视角重述相同的故事
+- **情节拓展** (Expand) - 在原有情节基础上增加细节、心理描写和场景刻画
+- **平行宇宙** (AU) - 保留核心角色设定，改变世界观背景进行创作
+- **假设性场景** (What If) - 探索关键情节的不同可能性分支
+- **跨作品联动** (Crossover) - 将不同作品的世界观和角色进行融合创作
+
+**支持的文学风格：**
+
+| 风格类型 | 特点 | 代表风格 |
+|---------|------|---------|
+| 古典武侠 | 用词典雅，句式整齐，意境深远 | 金庸、古龙 |
+| 网络文学 | 语言轻快，节奏明快，爽点密集 | 玄幻、都市爽文 |
+| 翻译腔 | 句式欧化，倒装结构，用词精准 | 外国文学翻译 |
+| 意识流 | 内心独白，思维跳跃，联想丰富 | 乔伊斯、伍尔夫 |
+| 纪实风格 | 客观冷静，细节详实，注重事实 | 报道文学 |
+| 黑色幽默 | 荒诞讽刺，轻松外表沉重内核 | 冯内古特、海勒 |
+
+**适用场景：**
+- 同人创作：基于喜欢的作品进行二次创作
+- 写作练习：通过改写和视角转换提升写作技巧
+- 创意拓展：为卡住的剧情寻找新的可能性
+- 风格实验：尝试不同的叙事风格和语言方式
+- 情节优化：对初稿进行润色和改进
+
+**详细信息：** 查看 [novel-fanfiction/SKILL.md](./novel-fanfiction/SKILL.md)
+
+---
+
 ## 使用说明
 
 每个 skill 都包含详细的文档和示例。在需要使用特定功能时，可以引用对应的 skill 来获取专业的指导和自动化流程。
@@ -82,12 +118,22 @@
 
 ```
 claude_skills/
-├── README.md           # 本文件
-├── github-deploy/      # GitHub 部署 skill
-│   ├── SKILL.md        # Skill 详细文档
-│   ├── references/     # 参考文档
-│   └── scripts/        # 辅助脚本
-└── skill-docs/         # Skill 分析工具
-    ├── SKILL.md        # Skill 详细文档
-    └── references/     # 参考文档
+├── README.md              # 本文件
+├── github-deploy/         # GitHub 部署 skill
+│   ├── SKILL.md           # Skill 详细文档
+│   ├── references/        # 参考文档
+│   │   ├── ADVANCED_WORKFLOWS.md
+│   │   ├── DOMAIN_SETUP.md
+│   │   ├── FRAMEWORK_CONFIGS.md
+│   │   └── PACKAGE_MANAGER_CONFIG.md
+│   └── scripts/           # 辅助脚本
+│       └── validate_setup.sh
+├── skill-docs/            # Skill 分析工具
+│   ├── SKILL.md           # Skill 详细文档
+│   └── references/        # 参考文档
+└── novel-fanfiction/      # 小说二创 skill
+    ├── SKILL.md           # Skill 详细文档
+    └── references/        # 参考文档
+        ├── WRITING_STYLES.md    # 写作风格参考
+        └── POV_GUIDE.md         # 叙事视角指南
 ```
